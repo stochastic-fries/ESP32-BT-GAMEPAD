@@ -15,6 +15,7 @@ mod bluetooth;
 mod games;
 
 use input::buttons::Buttons;
+use crate::config::MenuChoice;
 
 
 fn main() {
@@ -73,12 +74,13 @@ fn main() {
     display::welcome::show(&mut display);
     loop{
         let choice = display::menu::main_menu(&mut display, &buttons);
-        /*
+        
         match choice {
             //MenuChoice::Bluetooth =>
-            //MenuChoice::Games => 
+            MenuChoice::Games =>display::games::available_games(&mut display, &buttons),
+            MenuChoice::Settings =>display::settings::settings_menu(&mut display, &buttons),
+            _ => display::games::available_games(&mut display, &buttons),
         }
-        */
         std::thread::sleep(std::time::Duration::from_millis(20));
         
     }

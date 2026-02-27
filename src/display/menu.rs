@@ -15,6 +15,7 @@ use crate::input::buttons::Buttons;
 use crate::config::MenuChoice;
 use esp_idf_svc::hal::delay::FreeRtos;
 
+
 pub fn main_menu(display:&mut OledDisplay, buttons: &Buttons) -> MenuChoice {
     display.clear();
     let heading_style = MonoTextStyleBuilder::new()
@@ -25,14 +26,32 @@ pub fn main_menu(display:&mut OledDisplay, buttons: &Buttons) -> MenuChoice {
         .font(&FONT_6X10)
         .text_color(BinaryColor::On)
         .build();
-    
+    // font of the selection arrow is changed only in the function which creates it
+
     let mut option:i32 = 0;
     
-    let y_cod_of_first_option = 40;
-    let y_cod_of_second_option = 55;
+    let y_cod_of_first_option = 25;
+    let y_cod_of_second_option = 40;
+    let y_cod_of_third_option = 55;
 
-    // to track previous state so longpress != spamming
-    //let mut prev_btn_state = crate::input::buttons::ButtonState::default(); 
+    let max_rows = 3;
+    
+    // so longpress != spamming
+    let mut prev_btn_state = crate::input::buttons::ButtonState::default(); 
+
+    fn draw_selection_arrow(display: &mut OledDisplay ,y_cod_of_the_option:i32){
+        let options_style = MonoTextStyleBuilder::new()
+            .font(&FONT_6X10)
+            .text_color(BinaryColor::On)
+            .build();
+
+        Text::new(
+                "==>",
+                Point::new(10,y_cod_of_the_option),
+                options_style
+            ).draw(display).unwrap();
+            
+    }
     
     loop{
         display.clear(); // this first , hehehe
@@ -48,26 +67,28 @@ pub fn main_menu(display:&mut OledDisplay, buttons: &Buttons) -> MenuChoice {
             if option > 0 { option-=1; }
         }
         if btn_state.down {
-            if option < 1 { option+=1; }            // also change here if max no. of options increase later for now there is only 2
+            if option < max_rows - 1 { option+=1; }           
         }
 
-        if btn_state.x {
+
+        if btn_state.x != prev_btn_state.x{
             //idea is to take value of option and match it
             return match option {
                 0 => MenuChoice::Bluetooth,
                 1 => MenuChoice::Games, 
+                2 => MenuChoice::Settings,
                 _ => MenuChoice::Bluetooth,
             }
         }
 
-        //prev_btn_state = btn_state;
+        prev_btn_state = btn_state;
 
 
         // all the output/ drawing related stuff down here
 
         Text::new(
             "GAMING.....",
-            Point::new(20,20),
+            Point::new(20,5),
             heading_style,
         ).draw(display).unwrap();
 
@@ -81,26 +102,22 @@ pub fn main_menu(display:&mut OledDisplay, buttons: &Buttons) -> MenuChoice {
             options_style
         ).draw(display).unwrap();
 
-        if option == 0{
-            Text::new(
-                "==>",
-                Point::new(10,y_cod_of_first_option),
-                options_style
-            ).draw(display).unwrap();
+        Text::new( "settings",
+            Point::new(40,y_cod_of_third_option),
+            options_style
+        ).draw(display).unwrap();
         
-        }else if option == 1{
-        
-            Text::new(
-                "==>",
-                Point::new(10,y_cod_of_second_option),
-                options_style
-            ).draw(display).unwrap();
-            
+        match option{
+            0 => draw_selection_arrow(display, y_cod_of_first_option),
+            1 => draw_selection_arrow(display, y_cod_of_second_option),
+            2 => draw_selection_arrow(display, y_cod_of_third_option),
+
+            _ => draw_selection_arrow(display, y_cod_of_first_option),
         }
         
         display.flush();
         
-        FreeRtos::delay_ms(50);
+        FreeRtos::delay_ms(100);
 
     }
 }

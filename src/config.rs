@@ -5,7 +5,12 @@ pub enum MenuChoice {
     Bluetooth,
     Settings,
 }
-
+/*
+pub enum Games{
+    Snake,
+    Debug,
+}
+    */
 // pin numbers but are not being fully used in the 
 // project 'cause the are input is req. as a IO pin not as an interger
 pub const BTN_X_PIN: i32 = 34;
