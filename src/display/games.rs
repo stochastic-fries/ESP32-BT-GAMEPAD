@@ -10,13 +10,17 @@ use embedded_graphics::{
     prelude::*,
     text::{Alignment, Text},
 };
+use esp_idf_svc::hal::delay::FreeRtos;
 use crate::display::OledDisplay;
 use crate::input::buttons::Buttons;
+use crate::input::joysticks::Joysticks;
 use crate::config::MenuChoice;
 //use crate::config::Games;
 use crate::games; // menu redirecing to choose games
-pub fn available_games(display:&mut OledDisplay, buttons: &Buttons)  {
+pub fn available_games(display:&mut OledDisplay, buttons: &Buttons , joysticks: &mut Joysticks)  {
     display.clear();
+    FreeRtos::delay_ms(200);
+
     let y_cod_of_first_option : i32 = 20;
     let y_cod_of_second_option: i32 = 40;
     let mut option = 0;
@@ -69,14 +73,14 @@ pub fn available_games(display:&mut OledDisplay, buttons: &Buttons)  {
             ).draw(display).unwrap();
         }
 
-        if button_states.x != prev_btn_states.x {
+        if button_states.x{
             match option {
-                0 => {games::debug::start(display, &buttons); },
+                0 => {games::debug::start(display, &buttons, joysticks); },
                 1 => games::snake::start(display, &buttons),
                 _ => (),
             }
         }
-        if button_states.b != prev_btn_states.b{
+        if button_states.b {
             break // to go back to main menu
         }
         display.flush();

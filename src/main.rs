@@ -14,6 +14,7 @@ mod input;
 mod bluetooth;
 mod games;
 
+use input::joysticks::Joysticks;
 use input::buttons::Buttons;
 use crate::config::MenuChoice;
 
@@ -71,15 +72,23 @@ fn main() {
 
     );
 
+    let mut joysticks = Joysticks::new(
+    peripherals.adc1,
+    peripherals.pins.gpio34, // left X
+    peripherals.pins.gpio35, // left Y
+    peripherals.pins.gpio32, // right X
+    peripherals.pins.gpio33, // right Y
+    );
+
     display::welcome::show(&mut display);
     loop{
         let choice = display::menu::main_menu(&mut display, &buttons);
         
         match choice {
             //MenuChoice::Bluetooth =>
-            MenuChoice::Games =>display::games::available_games(&mut display, &buttons),
+            MenuChoice::Games =>display::games::available_games(&mut display, &buttons, &mut joysticks),
             MenuChoice::Settings =>display::settings::settings_menu(&mut display, &buttons),
-            _ => display::games::available_games(&mut display, &buttons),
+            _ => display::games::available_games(&mut display, &buttons, &mut joysticks),
         }
         std::thread::sleep(std::time::Duration::from_millis(20));
         

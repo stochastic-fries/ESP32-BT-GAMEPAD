@@ -17,9 +17,10 @@ use embedded_graphics::{
 
 use crate::display::OledDisplay;
 use crate::input::buttons::Buttons;
+use crate::input::joysticks::Joysticks;
 use esp_idf_svc::hal::delay::FreeRtos;
 
-pub fn start(display: &mut OledDisplay, buttons: &Buttons){
+pub fn start(display: &mut OledDisplay, buttons: &Buttons, joysticks: &mut Joysticks){
     display.clear();
     let heading_style = MonoTextStyleBuilder::new()
     .font(&FONT_9X18_BOLD)
@@ -36,12 +37,15 @@ pub fn start(display: &mut OledDisplay, buttons: &Buttons){
     .build();
     loop{
         let btn_states = buttons.read();
+        let left_joystick = joysticks.read_left();
+        let right_joystick = joysticks.read_right();
         
         display.clear();
 
-        let debug_text = format!("x :{}, y  :{}, a  :{},\n b  :{} up:  {},\n down:  {},\n, left:{}, right:{} \n l1:{},l2:{}, r1:{}, r2:{}",
+        let debug_text = format!("x :{}, y  :{}, a  :{},\n b  :{} up:  {},\n down:  {},\n, left:{}, right:{} \n l1:{},l2:{}, r1:{}, r2:{}\n lx :{}, ly :{}\n rx :{}, ry :{}  ",
          btn_states.x, btn_states.y,btn_states.a, btn_states.b, btn_states.up,btn_states.down, btn_states.left,
-          btn_states.right, btn_states.l1, btn_states.l2, btn_states.r1, btn_states.r2);
+          btn_states.right, btn_states.l1, btn_states.l2, btn_states.r1, btn_states.r2, left_joystick.x , left_joystick.y, 
+          right_joystick.x, right_joystick.y);
         
         Text::new(
             &debug_text,

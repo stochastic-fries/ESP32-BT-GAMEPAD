@@ -30,8 +30,8 @@ pub fn main_menu(display:&mut OledDisplay, buttons: &Buttons) -> MenuChoice {
 
     let mut option:i32 = 0;
     
-    let y_cod_of_first_option = 25;
-    let y_cod_of_second_option = 40;
+    let y_cod_of_first_option = 30;
+    let y_cod_of_second_option = 45;
     let y_cod_of_third_option = 55;
 
     let max_rows = 3;
@@ -88,7 +88,7 @@ pub fn main_menu(display:&mut OledDisplay, buttons: &Buttons) -> MenuChoice {
 
         Text::new(
             "GAMING.....",
-            Point::new(20,5),
+            Point::new(20,10),
             heading_style,
         ).draw(display).unwrap();
 

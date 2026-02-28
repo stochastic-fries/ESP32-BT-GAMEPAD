@@ -1,5 +1,6 @@
-
 // originally: https://github.com/T-vK/ESP32-BLE-Keyboard
+// the keyboard HID code is taken from a github page , from the example section and give to claude
+// and claude re wrote it for gamepad 
 #![allow(dead_code)]
 
 use esp32_nimble::{
@@ -10,223 +11,101 @@ use std::sync::Arc;
 use zerocopy::IntoBytes;
 use zerocopy_derive::{Immutable, IntoBytes};
 
-const KEYBOARD_ID: u8 = 0x01;
-const MEDIA_KEYS_ID: u8 = 0x02;
+const GAMEPAD_ID: u8 = 0x01;
 
-const HID_REPORT_DISCRIPTOR: &[u8] = hid!(
-  (USAGE_PAGE, 0x01), // USAGE_PAGE (Generic Desktop Ctrls)
-  (USAGE, 0x06),      // USAGE (Keyboard)
-  (COLLECTION, 0x01), // COLLECTION (Application)
-  // ------------------------------------------------- Keyboard
-  (REPORT_ID, KEYBOARD_ID), //   REPORT_ID (1)
-  (USAGE_PAGE, 0x07),       //   USAGE_PAGE (Kbrd/Keypad)
-  (USAGE_MINIMUM, 0xE0),    //   USAGE_MINIMUM (0xE0)
-  (USAGE_MAXIMUM, 0xE7),    //   USAGE_MAXIMUM (0xE7)
+const HID_REPORT_DESCRIPTOR: &[u8] = hid!(
+  (USAGE_PAGE, 0x01),       // USAGE_PAGE (Generic Desktop)
+  (USAGE, 0x05),            // USAGE (Gamepad)
+  (COLLECTION, 0x01),       // COLLECTION (Application)
+  (REPORT_ID, GAMEPAD_ID),  //   REPORT_ID (1)
+  // ------------------------------------------------- Buttons (16 buttons)
+  (USAGE_PAGE, 0x09),       //   USAGE_PAGE (Button)
+  (USAGE_MINIMUM, 0x01),    //   USAGE_MINIMUM (Button 1)
+  (USAGE_MAXIMUM, 0x10),    //   USAGE_MAXIMUM (Button 16)
   (LOGICAL_MINIMUM, 0x00),  //   LOGICAL_MINIMUM (0)
-  (LOGICAL_MAXIMUM, 0x01),  //   Logical Maximum (1)
+  (LOGICAL_MAXIMUM, 0x01),  //   LOGICAL_MAXIMUM (1)
   (REPORT_SIZE, 0x01),      //   REPORT_SIZE (1)
-  (REPORT_COUNT, 0x08),     //   REPORT_COUNT (8)
-  (HIDINPUT, 0x02), //   INPUT (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-  (REPORT_COUNT, 0x01), //   REPORT_COUNT (1) ; 1 byte (Reserved)
-  (REPORT_SIZE, 0x08), //   REPORT_SIZE (8)
-  (HIDINPUT, 0x01), //   INPUT (Const,Array,Abs,No Wrap,Linear,Preferred State,No Null Position)
-  (REPORT_COUNT, 0x05), //   REPORT_COUNT (5) ; 5 bits (Num lock, Caps lock, Scroll lock, Compose, Kana)
-  (REPORT_SIZE, 0x01),  //   REPORT_SIZE (1)
-  (USAGE_PAGE, 0x08),   //   USAGE_PAGE (LEDs)
-  (USAGE_MINIMUM, 0x01), //   USAGE_MINIMUM (0x01) ; Num Lock
-  (USAGE_MAXIMUM, 0x05), //   USAGE_MAXIMUM (0x05) ; Kana
-  (HIDOUTPUT, 0x02), //   OUTPUT (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
-  (REPORT_COUNT, 0x01), //   REPORT_COUNT (1) ; 3 bits (Padding)
-  (REPORT_SIZE, 0x03), //   REPORT_SIZE (3)
-  (HIDOUTPUT, 0x01), //   OUTPUT (Const,Array,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
-  (REPORT_COUNT, 0x06), //   REPORT_COUNT (6) ; 6 bytes (Keys)
-  (REPORT_SIZE, 0x08), //   REPORT_SIZE(8)
-  (LOGICAL_MINIMUM, 0x00), //   LOGICAL_MINIMUM(0)
-  (LOGICAL_MAXIMUM, 0x65), //   LOGICAL_MAXIMUM(0x65) ; 101 keys
-  (USAGE_PAGE, 0x07), //   USAGE_PAGE (Kbrd/Keypad)
-  (USAGE_MINIMUM, 0x00), //   USAGE_MINIMUM (0)
-  (USAGE_MAXIMUM, 0x65), //   USAGE_MAXIMUM (0x65)
-  (HIDINPUT, 0x00),  //   INPUT (Data,Array,Abs,No Wrap,Linear,Preferred State,No Null Position)
-  (END_COLLECTION),  // END_COLLECTION
-  // ------------------------------------------------- Media Keys
-  (USAGE_PAGE, 0x0C),         // USAGE_PAGE (Consumer)
-  (USAGE, 0x01),              // USAGE (Consumer Control)
-  (COLLECTION, 0x01),         // COLLECTION (Application)
-  (REPORT_ID, MEDIA_KEYS_ID), //   REPORT_ID (3)
-  (USAGE_PAGE, 0x0C),         //   USAGE_PAGE (Consumer)
-  (LOGICAL_MINIMUM, 0x00),    //   LOGICAL_MINIMUM (0)
-  (LOGICAL_MAXIMUM, 0x01),    //   LOGICAL_MAXIMUM (1)
-  (REPORT_SIZE, 0x01),        //   REPORT_SIZE (1)
-  (REPORT_COUNT, 0x10),       //   REPORT_COUNT (16)
-  (USAGE, 0xB5),              //   USAGE (Scan Next Track)     ; bit 0: 1
-  (USAGE, 0xB6),              //   USAGE (Scan Previous Track) ; bit 1: 2
-  (USAGE, 0xB7),              //   USAGE (Stop)                ; bit 2: 4
-  (USAGE, 0xCD),              //   USAGE (Play/Pause)          ; bit 3: 8
-  (USAGE, 0xE2),              //   USAGE (Mute)                ; bit 4: 16
-  (USAGE, 0xE9),              //   USAGE (Volume Increment)    ; bit 5: 32
-  (USAGE, 0xEA),              //   USAGE (Volume Decrement)    ; bit 6: 64
-  (USAGE, 0x23, 0x02),        //   Usage (WWW Home)            ; bit 7: 128
-  (USAGE, 0x94, 0x01),        //   Usage (My Computer) ; bit 0: 1
-  (USAGE, 0x92, 0x01),        //   Usage (Calculator)  ; bit 1: 2
-  (USAGE, 0x2A, 0x02),        //   Usage (WWW fav)     ; bit 2: 4
-  (USAGE, 0x21, 0x02),        //   Usage (WWW search)  ; bit 3: 8
-  (USAGE, 0x26, 0x02),        //   Usage (WWW stop)    ; bit 4: 16
-  (USAGE, 0x24, 0x02),        //   Usage (WWW back)    ; bit 5: 32
-  (USAGE, 0x83, 0x01),        //   Usage (Media sel)   ; bit 6: 64
-  (USAGE, 0x8A, 0x01),        //   Usage (Mail)        ; bit 7: 128
-  (HIDINPUT, 0x02), // INPUT (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-  (END_COLLECTION), // END_COLLECTION
+  (REPORT_COUNT, 0x10),     //   REPORT_COUNT (16)
+  (HIDINPUT, 0x02),         //   INPUT (Data,Var,Abs)
+  // ------------------------------------------------- Axes (4 axes: LX, LY, RX, RY)
+  (USAGE_PAGE, 0x01),       //   USAGE_PAGE (Generic Desktop)
+  (USAGE, 0x30),            //   USAGE (X)
+  (USAGE, 0x31),            //   USAGE (Y)
+  (USAGE, 0x32),            //   USAGE (Z)
+  (USAGE, 0x35),            //   USAGE (Rz)
+  (LOGICAL_MINIMUM, 0x81),  //   LOGICAL_MINIMUM (-127)
+  (LOGICAL_MAXIMUM, 0x7F),  //   LOGICAL_MAXIMUM (127)
+  (REPORT_SIZE, 0x08),      //   REPORT_SIZE (8)
+  (REPORT_COUNT, 0x04),     //   REPORT_COUNT (4)
+  (HIDINPUT, 0x02),         //   INPUT (Data,Var,Abs)
+  // ------------------------------------------------- Hat switch (D-pad)
+  (USAGE_PAGE, 0x01),       //   USAGE_PAGE (Generic Desktop)
+  (USAGE, 0x39),            //   USAGE (Hat switch)
+  (LOGICAL_MINIMUM, 0x00),  //   LOGICAL_MINIMUM (0)
+  (LOGICAL_MAXIMUM, 0x07),  //   LOGICAL_MAXIMUM (7)
+  (PHYSICAL_MINIMUM, 0x00), //   PHYSICAL_MINIMUM (0)
+  (PHYSICAL_MAXIMUM, 0x3B, 0x01), // PHYSICAL_MAXIMUM (315)
+  (UNIT, 0x14),             //   UNIT (Eng Rot: Degree)
+  (REPORT_SIZE, 0x04),      //   REPORT_SIZE (4)
+  (REPORT_COUNT, 0x01),     //   REPORT_COUNT (1)
+  (HIDINPUT, 0x42),         //   INPUT (Data,Var,Abs,Null)
+  // ------------------------------------------------- Padding
+  (REPORT_SIZE, 0x04),      //   REPORT_SIZE (4)
+  (REPORT_COUNT, 0x01),     //   REPORT_COUNT (1)
+  (HIDINPUT, 0x01),         //   INPUT (Const,Array,Abs)
+  (END_COLLECTION),         // END_COLLECTION
 );
 
-const SHIFT: u8 = 0x80;
-const ASCII_MAP: &[u8] = &[
-  0x00,         // NUL
-  0x00,         // SOH
-  0x00,         // STX
-  0x00,         // ETX
-  0x00,         // EOT
-  0x00,         // ENQ
-  0x00,         // ACK
-  0x00,         // BEL
-  0x2a,         // BS	Backspace
-  0x2b,         // TAB	Tab
-  0x28,         // LF	Enter
-  0x00,         // VT
-  0x00,         // FF
-  0x00,         // CR
-  0x00,         // SO
-  0x00,         // SI
-  0x00,         // DEL
-  0x00,         // DC1
-  0x00,         // DC2
-  0x00,         // DC3
-  0x00,         // DC4
-  0x00,         // NAK
-  0x00,         // SYN
-  0x00,         // ETB
-  0x00,         // CAN
-  0x00,         // EM
-  0x00,         // SUB
-  0x00,         // ESC
-  0x00,         // FS
-  0x00,         // GS
-  0x00,         // RS
-  0x00,         // US
-  0x2c,         //  ' '
-  0x1e | SHIFT, // !
-  0x34 | SHIFT, // "
-  0x20 | SHIFT, // #
-  0x21 | SHIFT, // $
-  0x22 | SHIFT, // %
-  0x24 | SHIFT, // &
-  0x34,         // '
-  0x26 | SHIFT, // (
-  0x27 | SHIFT, // )
-  0x25 | SHIFT, // *
-  0x2e | SHIFT, // +
-  0x36,         // ,
-  0x2d,         // -
-  0x37,         // .
-  0x38,         // /
-  0x27,         // 0
-  0x1e,         // 1
-  0x1f,         // 2
-  0x20,         // 3
-  0x21,         // 4
-  0x22,         // 5
-  0x23,         // 6
-  0x24,         // 7
-  0x25,         // 8
-  0x26,         // 9
-  0x33 | SHIFT, // :
-  0x33,         // ;
-  0x36 | SHIFT, // <
-  0x2e,         // =
-  0x37 | SHIFT, // >
-  0x38 | SHIFT, // ?
-  0x1f | SHIFT, // @
-  0x04 | SHIFT, // A
-  0x05 | SHIFT, // B
-  0x06 | SHIFT, // C
-  0x07 | SHIFT, // D
-  0x08 | SHIFT, // E
-  0x09 | SHIFT, // F
-  0x0a | SHIFT, // G
-  0x0b | SHIFT, // H
-  0x0c | SHIFT, // I
-  0x0d | SHIFT, // J
-  0x0e | SHIFT, // K
-  0x0f | SHIFT, // L
-  0x10 | SHIFT, // M
-  0x11 | SHIFT, // N
-  0x12 | SHIFT, // O
-  0x13 | SHIFT, // P
-  0x14 | SHIFT, // Q
-  0x15 | SHIFT, // R
-  0x16 | SHIFT, // S
-  0x17 | SHIFT, // T
-  0x18 | SHIFT, // U
-  0x19 | SHIFT, // V
-  0x1a | SHIFT, // W
-  0x1b | SHIFT, // X
-  0x1c | SHIFT, // Y
-  0x1d | SHIFT, // Z
-  0x2f,         // [
-  0x31,         // bslash
-  0x30,         // ]
-  0x23 | SHIFT, // ^
-  0x2d | SHIFT, // _
-  0x35,         // `
-  0x04,         // a
-  0x05,         // b
-  0x06,         // c
-  0x07,         // d
-  0x08,         // e
-  0x09,         // f
-  0x0a,         // g
-  0x0b,         // h
-  0x0c,         // i
-  0x0d,         // j
-  0x0e,         // k
-  0x0f,         // l
-  0x10,         // m
-  0x11,         // n
-  0x12,         // o
-  0x13,         // p
-  0x14,         // q
-  0x15,         // r
-  0x16,         // s
-  0x17,         // t
-  0x18,         // u
-  0x19,         // v
-  0x1a,         // w
-  0x1b,         // x
-  0x1c,         // y
-  0x1d,         // z
-  0x2f | SHIFT, // {
-  0x31 | SHIFT, // |
-  0x30 | SHIFT, // }
-  0x35 | SHIFT, // ~
-  0,            // DEL
-];
+/// Gamepad buttons bitmask constants
+pub struct Button;
+impl Button {
+  pub const CROSS:     u16 = 1 << 0;
+  pub const CIRCLE:    u16 = 1 << 1;
+  pub const SQUARE:    u16 = 1 << 2;
+  pub const TRIANGLE:  u16 = 1 << 3;
+  pub const L1:        u16 = 1 << 4;
+  pub const R1:        u16 = 1 << 5;
+  pub const L2:        u16 = 1 << 6;
+  pub const R2:        u16 = 1 << 7;
+  pub const SELECT:    u16 = 1 << 8;
+  pub const START:     u16 = 1 << 9;
+  pub const L3:        u16 = 1 << 10;
+  pub const R3:        u16 = 1 << 11;
+  pub const HOME:      u16 = 1 << 12;
+}
+
+/// Hat switch (D-pad) values
+#[repr(u8)]
+pub enum DPad {
+  North     = 0,
+  NorthEast = 1,
+  East      = 2,
+  SouthEast = 3,
+  South     = 4,
+  SouthWest = 5,
+  West      = 6,
+  NorthWest = 7,
+  Centered  = 8,
+}
 
 #[derive(IntoBytes, Immutable)]
 #[repr(packed)]
-struct KeyReport {
-  modifiers: u8,
-  reserved: u8,
-  keys: [u8; 6],
+struct GamepadReport {
+  buttons: u16, // 16 buttons
+  lx: i8,       // Left stick X  (-127 to 127)
+  ly: i8,       // Left stick Y  (-127 to 127)
+  rx: i8,       // Right stick X (-127 to 127)
+  ry: i8,       // Right stick Y (-127 to 127)
+  hat: u8,      // D-pad hat switch (upper nibble = padding, lower nibble = direction)
 }
 
-struct Keyboard {
+struct Gamepad {
   server: &'static mut BLEServer,
-  input_keyboard: Arc<Mutex<BLECharacteristic>>,
-  output_keyboard: Arc<Mutex<BLECharacteristic>>,
-  input_media_keys: Arc<Mutex<BLECharacteristic>>,
-  key_report: KeyReport,
+  input_gamepad: Arc<Mutex<BLECharacteristic>>,
+  report: GamepadReport,
 }
 
-impl Keyboard {
+impl Gamepad {
   fn new() -> anyhow::Result<Self> {
     let device = BLEDevice::take();
     device
@@ -238,36 +117,35 @@ impl Keyboard {
     let server = device.get_server();
     let mut hid = BLEHIDDevice::new(server);
 
-    let input_keyboard = hid.input_report(KEYBOARD_ID);
-    let output_keyboard = hid.output_report(KEYBOARD_ID);
-    let input_media_keys = hid.input_report(MEDIA_KEYS_ID);
+    let input_gamepad = hid.input_report(GAMEPAD_ID);
 
     hid.manufacturer("Espressif");
     hid.pnp(0x02, 0x05ac, 0x820a, 0x0210);
     hid.hid_info(0x00, 0x01);
 
-    hid.report_map(HID_REPORT_DISCRIPTOR);
+    hid.report_map(HID_REPORT_DESCRIPTOR);
 
     hid.set_battery_level(100);
 
     let ble_advertising = device.get_advertising();
     ble_advertising.lock().scan_response(false).set_data(
       BLEAdvertisementData::new()
-        .name("ESP32 Keyboard")
-        .appearance(0x03C1)
+        .name("ESP32 Gamepad")
+        .appearance(0x03C4) // HID Gamepad appearance
         .add_service_uuid(hid.hid_service().lock().uuid()),
     )?;
     ble_advertising.lock().start()?;
 
     Ok(Self {
       server,
-      input_keyboard,
-      output_keyboard,
-      input_media_keys,
-      key_report: KeyReport {
-        modifiers: 0,
-        reserved: 0,
-        keys: [0; 6],
+      input_gamepad,
+      report: GamepadReport {
+        buttons: 0,
+        lx: 0,
+        ly: 0,
+        rx: 0,
+        ry: 0,
+        hat: DPad::Centered as u8,
       },
     })
   }
@@ -276,74 +154,84 @@ impl Keyboard {
     self.server.connected_count() > 0
   }
 
-  fn write(&mut self, str: &str) {
-    for char in str.as_bytes() {
-      self.press(*char);
-      self.release();
+  fn send_report(&self) {
+    self
+      .input_gamepad
+      .lock()
+      .set_value(self.report.as_bytes())
+      .notify();
+    esp_idf_svc::hal::delay::Ets::delay_ms(7);
+  }
+
+  fn press(&mut self, button: u16) {
+    self.report.buttons |= button;
+    self.send_report();
+  }
+
+  fn release(&mut self, button: u16) {
+    self.report.buttons &= !button;
+    self.send_report();
+  }
+
+  fn release_all(&mut self) {
+    self.report.buttons = 0;
+    self.send_report();
+  }
+
+  fn set_left_stick(&mut self, x: i8, y: i8) {
+    self.report.lx = x;
+    self.report.ly = y;
+    self.send_report();
+  }
+
+  fn set_right_stick(&mut self, x: i8, y: i8) {
+    self.report.rx = x;
+    self.report.ry = y;
+    self.send_report();
+  }
+
+  fn set_dpad(&mut self, direction: DPad) {
+    self.report.hat = direction as u8;
+    self.send_report();
+  }
+}
+
+pub fn start() -> anyhow::Result<()> {
+  esp_idf_svc::sys::link_patches();
+  esp_idf_svc::log::EspLogger::initialize_default();
+
+  log::info!("Starting BLE gamepad...");
+
+  let mut gamepad = match Gamepad::new() {
+    Ok(g) => {
+      log::info!("Gamepad initialized successfully");
+      g
+    }
+    Err(e) => {
+      log::error!("Failed to initialize gamepad: {:?}", e);
+      return Err(e);
+    }
+  };
+
+  log::info!("Entering main loop");
+  loop {
+    if gamepad.connected() {
+      log::info!("Pressing Cross button...");
+      gamepad.press(Button::CROSS);
+      esp_idf_svc::hal::delay::FreeRtos::delay_ms(500);
+
+      gamepad.release(Button::CROSS);
+      esp_idf_svc::hal::delay::FreeRtos::delay_ms(500);
+
+      log::info!("Moving left stick...");
+      gamepad.set_left_stick(127, 0);
+      esp_idf_svc::hal::delay::FreeRtos::delay_ms(500);
+
+      gamepad.set_left_stick(0, 0);
+      esp_idf_svc::hal::delay::FreeRtos::delay_ms(500);
+    } else {
+      log::info!("Waiting for connection...");
+      esp_idf_svc::hal::delay::FreeRtos::delay_ms(500);
     }
   }
-fn send_report(&self, keys: &KeyReport) {
-    self
-        .input_keyboard
-        .lock()
-        .set_value(keys.as_bytes())
-        .notify();
-    esp_idf_svc::hal::delay::Ets::delay_ms(7);
-}
-
-fn press(&mut self, char: u8) {
-    let mut key = ASCII_MAP[char as usize];
-    if (key & SHIFT) > 0 {
-        self.key_report.modifiers |= 0x02;
-        key &= !SHIFT;
-    }
-    self.key_report.keys[0] = key;
-    // Clone the report to avoid borrow conflict
-    let report = KeyReport {
-        modifiers: self.key_report.modifiers,
-        reserved: self.key_report.reserved,
-        keys: self.key_report.keys,
-    };
-    self.send_report(&report);
-}
-
-fn release(&mut self) {
-    self.key_report.modifiers = 0;
-    self.key_report.keys.fill(0);
-    let report = KeyReport {
-        modifiers: self.key_report.modifiers,
-        reserved: self.key_report.reserved,
-        keys: self.key_report.keys,
-    };
-    self.send_report(&report);
-}
-}
-
-fn main() -> anyhow::Result<()> { esp_idf_svc::sys::link_patches();
-    esp_idf_svc::log::EspLogger::initialize_default();
-
-    log::info!("Starting BLE keyboard...");
-
-    let mut keyboard = match Keyboard::new() {
-        Ok(k) => {
-            log::info!("Keyboard initialized successfully");
-            k
-        }
-        Err(e) => {
-            log::error!("Failed to initialize keyboard: {:?}", e);
-            return Err(e);
-        }
-    };
-
-    log::info!("Entering main loop");
-    loop {
-        if keyboard.connected() {
-            log::info!("Sending 'Hello world'...");
-            keyboard.write("Hello world\n");
-        } else {
-            log::info!("Wai2ting for connection...");
-        }
-        esp_idf_svc::hal::delay::FreeRtos::delay_ms(500);
-    }
-
 }
