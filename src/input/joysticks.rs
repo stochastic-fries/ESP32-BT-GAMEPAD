@@ -75,11 +75,11 @@ impl<'a> Joysticks<'a> {
 const MIN: i32 = 0;       
 const MAX: i32 = 2450;    
 const CENTER: i32 = 1075;  
-const DEADZONE: i32 = 50;  
+const DEADZONE: i32 = 100;  
 
 
 
-fn raw_to_axis(raw: u16) -> i8 {
+fn raw_to_axis(raw: u16) -> i8{
 
     let raw = raw as i32;
     if (raw - CENTER).abs() <= DEADZONE {
@@ -95,31 +95,3 @@ fn raw_to_axis(raw: u16) -> i8 {
 
     scaled.clamp(-127, 127) as i8
 }
-
-/*
-fn raw_to_axis(raw: u16, ) -> u16 {
-   // let centered =RAW_CENTER - raw as i32  ;
-   // let scaled = ((centered * 100) / 2048) as i16;
-   // let clamped = scaled.clamp(-100, 100); // make sure we never exceed range
-   // //if flip { -clamped } else { clamped }
-   // clamped
-   raw
-}
-*/
-/*
-// Your joystick center reading — run a test and see what it prints when centered
-const CENTER: i32 = 2048; // try 1800 or 1900 if center isn't zero
-
-fn raw_to_axis(raw: u16, ) -> i16 {
-    let centered =CENTER - raw as i32  ;
-    let scaled = ((centered * 100) / 2048) as i16;
-    let clamped = scaled.clamp(-100, 100); // make sure we never exceed range
-    //if flip { -clamped } else { clamped }
-    clamped
-}
-
-// converts 0-4095 → -100 to +100
-fn raw_to_axis(raw: u16) -> i16 {
-    let centered = raw as i32 - 2048;
-    ((centered * 100) / 2048) as i16
-}*/

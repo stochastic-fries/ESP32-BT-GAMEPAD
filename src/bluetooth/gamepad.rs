@@ -1,6 +1,7 @@
 // originally: https://github.com/T-vK/ESP32-BLE-Keyboard
 // the keyboard HID code is taken from a github page , from the example section and give to claude
-// and claude re wrote it for gamepad 
+// and claude re wrote it for gamepad and then i editted it , to make i work
+
 #![allow(dead_code)]
 
 use esp32_nimble::{
@@ -10,68 +11,85 @@ use esp32_nimble::{
 use std::sync::Arc;
 use zerocopy::IntoBytes;
 use zerocopy_derive::{Immutable, IntoBytes};
+use esp_idf_svc::hal::delay::FreeRtos;
+
+
+use crate::display::OledDisplay;
+use crate::input::buttons::Buttons;
+use crate::input::joysticks::Joysticks;
+
+
+
+use embedded_graphics::{
+    mono_font::{
+        ascii::{
+            FONT_9X18_BOLD,
+            FONT_6X10,
+            FONT_4X6,
+        },
+        MonoTextStyleBuilder} , 
+    pixelcolor::BinaryColor,
+    prelude::*,
+    text::{Alignment, Text},
+};
+
 
 const GAMEPAD_ID: u8 = 0x01;
-
 const HID_REPORT_DESCRIPTOR: &[u8] = hid!(
-  (USAGE_PAGE, 0x01),       // USAGE_PAGE (Generic Desktop)
-  (USAGE, 0x05),            // USAGE (Gamepad)
-  (COLLECTION, 0x01),       // COLLECTION (Application)
-  (REPORT_ID, GAMEPAD_ID),  //   REPORT_ID (1)
-  // ------------------------------------------------- Buttons (16 buttons)
-  (USAGE_PAGE, 0x09),       //   USAGE_PAGE (Button)
-  (USAGE_MINIMUM, 0x01),    //   USAGE_MINIMUM (Button 1)
-  (USAGE_MAXIMUM, 0x10),    //   USAGE_MAXIMUM (Button 16)
-  (LOGICAL_MINIMUM, 0x00),  //   LOGICAL_MINIMUM (0)
-  (LOGICAL_MAXIMUM, 0x01),  //   LOGICAL_MAXIMUM (1)
-  (REPORT_SIZE, 0x01),      //   REPORT_SIZE (1)
-  (REPORT_COUNT, 0x10),     //   REPORT_COUNT (16)
-  (HIDINPUT, 0x02),         //   INPUT (Data,Var,Abs)
-  // ------------------------------------------------- Axes (4 axes: LX, LY, RX, RY)
-  (USAGE_PAGE, 0x01),       //   USAGE_PAGE (Generic Desktop)
-  (USAGE, 0x30),            //   USAGE (X)
-  (USAGE, 0x31),            //   USAGE (Y)
-  (USAGE, 0x32),            //   USAGE (Z)
-  (USAGE, 0x35),            //   USAGE (Rz)
-  (LOGICAL_MINIMUM, 0x81),  //   LOGICAL_MINIMUM (-127)
-  (LOGICAL_MAXIMUM, 0x7F),  //   LOGICAL_MAXIMUM (127)
-  (REPORT_SIZE, 0x08),      //   REPORT_SIZE (8)
-  (REPORT_COUNT, 0x04),     //   REPORT_COUNT (4)
-  (HIDINPUT, 0x02),         //   INPUT (Data,Var,Abs)
-  // ------------------------------------------------- Hat switch (D-pad)
-  (USAGE_PAGE, 0x01),       //   USAGE_PAGE (Generic Desktop)
-  (USAGE, 0x39),            //   USAGE (Hat switch)
-  (LOGICAL_MINIMUM, 0x00),  //   LOGICAL_MINIMUM (0)
-  (LOGICAL_MAXIMUM, 0x07),  //   LOGICAL_MAXIMUM (7)
-  (PHYSICAL_MINIMUM, 0x00), //   PHYSICAL_MINIMUM (0)
-  (PHYSICAL_MAXIMUM, 0x3B, 0x01), // PHYSICAL_MAXIMUM (315)
-  (UNIT, 0x14),             //   UNIT (Eng Rot: Degree)
-  (REPORT_SIZE, 0x04),      //   REPORT_SIZE (4)
-  (REPORT_COUNT, 0x01),     //   REPORT_COUNT (1)
-  (HIDINPUT, 0x42),         //   INPUT (Data,Var,Abs,Null)
-  // ------------------------------------------------- Padding
-  (REPORT_SIZE, 0x04),      //   REPORT_SIZE (4)
-  (REPORT_COUNT, 0x01),     //   REPORT_COUNT (1)
-  (HIDINPUT, 0x01),         //   INPUT (Const,Array,Abs)
-  (END_COLLECTION),         // END_COLLECTION
+  (USAGE_PAGE, 0x01),
+  (USAGE, 0x05),           // Gamepad
+  (COLLECTION, 0x01),
+  (REPORT_ID, GAMEPAD_ID),
+  // 16 buttons, fits u16 perfectly, no padding needed
+  (USAGE_PAGE, 0x09),
+  (USAGE_MINIMUM, 0x01),
+  (USAGE_MAXIMUM, 0x10),   // 16 buttons
+  (LOGICAL_MINIMUM, 0x00),
+  (LOGICAL_MAXIMUM, 0x01),
+  (REPORT_SIZE, 0x01),
+  (REPORT_COUNT, 0x10),    // 16 bits
+  (HIDINPUT, 0x02),
+  // 4 axes (LX, LY, RX, RY)
+  (USAGE_PAGE, 0x01),
+  (USAGE, 0x30),           // X  (left stick horizontal)
+  (USAGE, 0x31),           // Y  (left stick vertical)
+  (USAGE, 0x32),           // Z  (right stick horizontal)
+  (USAGE, 0x35),           // Rz (right stick vertical)
+  (LOGICAL_MINIMUM, 0x81), // -127
+  (LOGICAL_MAXIMUM, 0x7F), // 127
+  (REPORT_SIZE, 0x08),
+  (REPORT_COUNT, 0x04),
+  (HIDINPUT, 0x02),
+  (END_COLLECTION),
 );
-
 /// Gamepad buttons bitmask constants
 pub struct Button;
 impl Button {
-  pub const CROSS:     u16 = 1 << 0;
-  pub const CIRCLE:    u16 = 1 << 1;
-  pub const SQUARE:    u16 = 1 << 2;
-  pub const TRIANGLE:  u16 = 1 << 3;
-  pub const L1:        u16 = 1 << 4;
-  pub const R1:        u16 = 1 << 5;
-  pub const L2:        u16 = 1 << 6;
-  pub const R2:        u16 = 1 << 7;
-  pub const SELECT:    u16 = 1 << 8;
-  pub const START:     u16 = 1 << 9;
-  pub const L3:        u16 = 1 << 10;
-  pub const R3:        u16 = 1 << 11;
-  pub const HOME:      u16 = 1 << 12;
+    // Action
+    pub const A: u16 = 1 << 0;
+    pub const B: u16 = 1 << 1;
+    pub const X: u16 = 1 << 2;
+    pub const Y: u16 = 1 << 3;
+
+    // D-pad
+    pub const UP:    u16 = 1 << 4;
+    pub const DOWN:  u16 = 1 << 5;
+    pub const LEFT:  u16 = 1 << 6;
+    pub const RIGHT: u16 = 1 << 7;
+
+    // Triggers
+    pub const L1: u16 = 1 << 8;
+    pub const L2: u16 = 1 << 9;
+    pub const R1: u16 = 1 << 10;
+    pub const R2: u16 = 1 << 11;
+
+    // Stick clicks
+    pub const L3: u16 = 1 << 12;
+    pub const R3: u16 = 1 << 13;
+
+    // Menu
+    pub const SELECT: u16 = 1 << 14;
+    pub const START:  u16 = 1 << 15;
 }
 
 /// Hat switch (D-pad) values
@@ -96,7 +114,6 @@ struct GamepadReport {
   ly: i8,       // Left stick Y  (-127 to 127)
   rx: i8,       // Right stick X (-127 to 127)
   ry: i8,       // Right stick Y (-127 to 127)
-  hat: u8,      // D-pad hat switch (upper nibble = padding, lower nibble = direction)
 }
 
 struct Gamepad {
@@ -108,34 +125,45 @@ struct Gamepad {
 impl Gamepad {
   fn new() -> anyhow::Result<Self> {
     let device = BLEDevice::take();
+    
     device
-      .security()
-      .set_auth(AuthReq::all())
-      .set_io_cap(SecurityIOCap::NoInputNoOutput)
-      .resolve_rpa();
+  .security()
+  .set_auth(AuthReq::Bond)
+  .set_io_cap(SecurityIOCap::NoInputNoOutput)
+  .set_passkey(0)
+  .resolve_rpa();
 
     let server = device.get_server();
+
+    server.on_connect(|server, desc| {
+        log::info!("Client connected: {:?}", desc);
+        server.update_conn_params(desc.conn_handle(), 16, 32, 0, 600).unwrap();
+    });
+
+    server.on_disconnect(|_desc, reason| {
+        log::info!("Client disconnected, reason: {:?}", reason);
+        BLEDevice::take().get_advertising().lock().start().unwrap();
+    });
+
+    
     let mut hid = BLEHIDDevice::new(server);
 
     let input_gamepad = hid.input_report(GAMEPAD_ID);
 
     hid.manufacturer("Espressif");
-    hid.pnp(0x02, 0x05ac, 0x820a, 0x0210);
+    hid.pnp(0x02, 0x045e, 0x028e, 0x0114); // Xbox 360 controller PnP IDs
     hid.hid_info(0x00, 0x01);
-
     hid.report_map(HID_REPORT_DESCRIPTOR);
-
     hid.set_battery_level(100);
 
     let ble_advertising = device.get_advertising();
     ble_advertising.lock().scan_response(false).set_data(
       BLEAdvertisementData::new()
         .name("ESP32 Gamepad")
-        .appearance(0x03C4) // HID Gamepad appearance
+        .appearance(0x03C4)
         .add_service_uuid(hid.hid_service().lock().uuid()),
     )?;
     ble_advertising.lock().start()?;
-
     Ok(Self {
       server,
       input_gamepad,
@@ -145,7 +173,6 @@ impl Gamepad {
         ly: 0,
         rx: 0,
         ry: 0,
-        hat: DPad::Centered as u8,
       },
     })
   }
@@ -189,49 +216,76 @@ impl Gamepad {
     self.report.ry = y;
     self.send_report();
   }
-
+/*
   fn set_dpad(&mut self, direction: DPad) {
     self.report.hat = direction as u8;
     self.send_report();
   }
+*/
 }
 
-pub fn start() -> anyhow::Result<()> {
-  esp_idf_svc::sys::link_patches();
-  esp_idf_svc::log::EspLogger::initialize_default();
+pub fn start(display: &mut OledDisplay, buttons: &Buttons, joysticks: &mut Joysticks)  {
+    log::info!("Gamepad initialized, waiting for connection...");
+    display.clear();
+    let mut gamepad = match Gamepad::new() {
+     Ok(g) => g,
+     Err(e) => {
+         log::error!("Gamepad::new() failed: {:?}", e);
+         return;
+     }
+    };
+     let menu_style = MonoTextStyleBuilder::new()
+        .font(&FONT_4X6)
+        .text_color(BinaryColor::On)
+        .build();    
+      Text::new(
+            "playing on a bluetooth device",
+            Point::new(20,50),
+            menu_style
+        ).draw(display).unwrap();
+      display.flush(); 
+    loop {
+        if gamepad.connected() {
+            let b = buttons.read();
+            let left_stick = joysticks.read_left();
+            let right_stick = joysticks.read_right();
 
-  log::info!("Starting BLE gamepad...");
+            let mut btn: u16 = 0;
 
-  let mut gamepad = match Gamepad::new() {
-    Ok(g) => {
-      log::info!("Gamepad initialized successfully");
-      g
+            // Action
+            if b.a { btn |= Button::A; }
+            if b.b { btn |= Button::B; }
+            if b.x { btn |= Button::X; }
+            if b.y { btn |= Button::Y; }
+
+            // D-pad
+            if b.up    { btn |= Button::UP; }
+            if b.down  { btn |= Button::DOWN; }
+            if b.left  { btn |= Button::LEFT; }
+            if b.right { btn |= Button::RIGHT; }
+
+            // Triggers
+            if b.l1 { btn |= Button::L1; }
+            if b.l2 { btn |= Button::L2; }
+            if b.r1 { btn |= Button::R1; }
+            if b.r2 { btn |= Button::R2; }
+
+            // Stick clicks
+            if b.l3 { btn |= Button::L3; }
+            if b.r3 { btn |= Button::R3; }
+
+            // Menu
+            if b.select { btn |= Button::SELECT; }
+            if b.start  { btn |= Button::START; }
+
+            gamepad.report.buttons = btn;
+            gamepad.report.lx = left_stick.x;
+            gamepad.report.ly = left_stick.y;
+            gamepad.report.rx = right_stick.x;
+            gamepad.report.ry = right_stick.y;
+            gamepad.send_report();
+        }
+
+        FreeRtos::delay_ms(10);
     }
-    Err(e) => {
-      log::error!("Failed to initialize gamepad: {:?}", e);
-      return Err(e);
-    }
-  };
-
-  log::info!("Entering main loop");
-  loop {
-    if gamepad.connected() {
-      log::info!("Pressing Cross button...");
-      gamepad.press(Button::CROSS);
-      esp_idf_svc::hal::delay::FreeRtos::delay_ms(500);
-
-      gamepad.release(Button::CROSS);
-      esp_idf_svc::hal::delay::FreeRtos::delay_ms(500);
-
-      log::info!("Moving left stick...");
-      gamepad.set_left_stick(127, 0);
-      esp_idf_svc::hal::delay::FreeRtos::delay_ms(500);
-
-      gamepad.set_left_stick(0, 0);
-      esp_idf_svc::hal::delay::FreeRtos::delay_ms(500);
-    } else {
-      log::info!("Waiting for connection...");
-      esp_idf_svc::hal::delay::FreeRtos::delay_ms(500);
-    }
-  }
 }

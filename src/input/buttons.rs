@@ -13,9 +13,11 @@ pub struct Buttons<'a>{
 
     pub l1:     PinDriver<'a, AnyIOPin, Input>,
     pub l2:     PinDriver<'a, AnyIOPin, Input>,
+    pub l3:     PinDriver<'a, AnyIOPin, Input>,
 
     pub r1:     PinDriver<'a, AnyIOPin, Input>,
     pub r2:     PinDriver<'a, AnyIOPin, Input>,
+    pub r3:     PinDriver<'a, AnyIOPin, Input>,
     
     pub start:     PinDriver<'a, AnyIOPin, Input>,
     pub select:     PinDriver<'a, AnyIOPin, Input>,
@@ -65,9 +67,12 @@ impl<'a> Buttons<'a> {
     
         pin_l1: AnyIOPin,
         pin_l2: AnyIOPin,
+        pin_l3: AnyIOPin,
+
 
         pin_r1: AnyIOPin,
         pin_r2: AnyIOPin,
+        pin_r3: AnyIOPin,
 
         pin_start: AnyIOPin, 
         pin_select: AnyIOPin,
@@ -99,18 +104,17 @@ impl<'a> Buttons<'a> {
 
             l1: setup(pin_l1),
             l2: setup(pin_l2),
+            l3: setup(pin_l3),
+
             r1: setup(pin_r1),
             r2: setup(pin_r2),
+            r3: setup(pin_r3),
         }
     }
 
     // Call this every loop tick to get current button states
     pub fn read(&self) -> ButtonState {
-        let l1 = self.l1.is_low();
-        let l2 = self.l2.is_low();
-        let r1 = self.r1.is_low();
-        let r2 = self.r2.is_low();
-
+        
         ButtonState {
             x: self.x.is_low(),
             y: self.y.is_low(),
@@ -121,13 +125,15 @@ impl<'a> Buttons<'a> {
             down:  self.down.is_low(),
             left:  self.left.is_low(),
             right: self.right.is_low(),
-        
-            l1,
-            l2,
-            l3: l1 && l2,
-            r1,
-            r2,
-            r3: r1 && r2,
+            
+            l1: self.l1.is_low(),
+            l2: self.l2.is_low(),
+            l3: self.l3.is_low(),
+
+            r1: self.r1.is_low(),
+            r2: self.r2.is_low(),
+            r3: self.r3.is_low(),
+
 
             start: self.start.is_low(),
             select: self.select.is_low(),

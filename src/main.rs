@@ -26,6 +26,7 @@ fn main() {
 
     // Bind the log crate to the ESP Logging facilities
     esp_idf_svc::log::EspLogger::initialize_default();
+    esp_idf_svc::nvs::EspDefaultNvsPartition::take().unwrap();
 
     log::info!("Hello, world!");
 
@@ -50,6 +51,8 @@ fn main() {
 
     // Set up buttons using the actual pin objects
     // We use downgrade_input() to convert specific pin types into AnyInputPin
+    // l3 and r3 are joystick clicks
+    // back buttons doesn't work with HID or bluetooth devices it is just to nevigate b/w menus
     let mut buttons = Buttons::new(
         peripherals.pins.gpio12.downgrade(), // x
         peripherals.pins.gpio14.downgrade(), // y
@@ -61,14 +64,18 @@ fn main() {
         peripherals.pins.gpio18.downgrade(), // left
         peripherals.pins.gpio19.downgrade(), // right
 
-        peripherals.pins.gpio23.downgrade(), // l1
-        peripherals.pins.gpio25.downgrade(), // l2
-        peripherals.pins.gpio0.downgrade(), // r1
-        peripherals.pins.gpio2.downgrade(), // r2
+        peripherals.pins.gpio1.downgrade(), // l1       to be wired on board
+        peripherals.pins.gpio3.downgrade(), // l2       to be wired on board         
+        peripherals.pins.gpio25.downgrade(), // l3
 
-        peripherals.pins.gpio16.downgrade(), // start 
-        peripherals.pins.gpio4.downgrade(), // select
-        peripherals.pins.gpio26.downgrade(), // back , temporary just to avoid un-necessary error
+        peripherals.pins.gpio0.downgrade(), // r1        to be wired on board       
+        peripherals.pins.gpio2.downgrade(), // r2        to be wired on board
+        peripherals.pins.gpio26.downgrade(), // r3
+
+
+        peripherals.pins.gpio15.downgrade(), // start       to be wired on board       
+        peripherals.pins.gpio4.downgrade(), // select       to be wired on boardz  
+        peripherals.pins.gpio16.downgrade(), // back      do this
 
     );
 
@@ -85,7 +92,7 @@ fn main() {
         let choice = display::menu::main_menu(&mut display, &buttons);
         
         match choice {
-            //MenuChoice::Bluetooth =>
+            MenuChoice::Bluetooth => bluetooth::gamepad::start(&mut display,&buttons, &mut joysticks),
             MenuChoice::Games =>display::games::available_games(&mut display, &buttons, &mut joysticks),
             MenuChoice::Settings =>display::settings::settings_menu(&mut display, &buttons),
             _ => display::games::available_games(&mut display, &buttons, &mut joysticks),
