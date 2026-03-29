@@ -6,7 +6,7 @@ use esp_idf_svc::hal::{
     units::KiloHertz,
 
 };
-use sh1106::{Builder, mode::GraphicsMode};  // <-- sh1106 instead of ssd1306
+use sh1106::{Builder, mode::GraphicsMode};  
 
 mod config;
 mod display;
@@ -33,9 +33,9 @@ fn main() {
     let peripherals = Peripherals::take().unwrap();
 
     //display 
-    // --- Set up I2C ---
-    let sda = peripherals.pins.gpio21; // default I2C SDA on ESP32
-    let scl = peripherals.pins.gpio22; // default I2C SCL on ESP32
+    // Set up I2C 
+    let sda = peripherals.pins.gpio21; 
+    let scl = peripherals.pins.gpio22; 
     let i2c = I2cDriver::new(
         peripherals.i2c0,
         sda,
@@ -43,41 +43,24 @@ fn main() {
         &I2cConfig::new().baudrate(KiloHertz(400).into()),
     ).unwrap();
 
-    // --- Set up display ---
+    // Set up display 
     let mut display: GraphicsMode<_> = Builder::new().connect_i2c(i2c).into();
     display.init().unwrap();
     display.flush().unwrap();
 
 
-    // Set up buttons using the actual pin objects
-    // We use downgrade_input() to convert specific pin types into AnyInputPin
-    // l3 and r3 are joystick clicks
     // back buttons doesn't work with HID or bluetooth devices it is just to nevigate b/w menus
-    let mut buttons = Buttons::new(
-        peripherals.pins.gpio12.downgrade(), // x
-        peripherals.pins.gpio14.downgrade(), // y
-        peripherals.pins.gpio27.downgrade(), // a
-        peripherals.pins.gpio13.downgrade(), // b
-
-        peripherals.pins.gpio17.downgrade(), // up 
-        peripherals.pins.gpio5.downgrade(), // down
-        peripherals.pins.gpio18.downgrade(), // left
-        peripherals.pins.gpio19.downgrade(), // right
-
-        peripherals.pins.gpio1.downgrade(), // l1       to be wired on board
-        peripherals.pins.gpio3.downgrade(), // l2       to be wired on board         
-        peripherals.pins.gpio25.downgrade(), // l3
-
-        peripherals.pins.gpio0.downgrade(), // r1        to be wired on board       
-        peripherals.pins.gpio2.downgrade(), // r2        to be wired on board
-        peripherals.pins.gpio26.downgrade(), // r3
-
-
-        peripherals.pins.gpio15.downgrade(), // start       to be wired on board       
-        peripherals.pins.gpio4.downgrade(), // select       to be wired on boardz  
-        peripherals.pins.gpio16.downgrade(), // back      do this
-
-    );
+      let mut buttons = Buttons::new(
+       peripherals.pins.gpio13.into(),  // row0
+       peripherals.pins.gpio12.into(),  // row1
+       peripherals.pins.gpio14.into(),  // row2
+       peripherals.pins.gpio27.into(),  // row3
+       peripherals.pins.gpio19.into(),  // col0
+       peripherals.pins.gpio18.into(),  // col1
+       peripherals.pins.gpio5.into(),  // col2
+       peripherals.pins.gpio17.into(),  // col3
+       peripherals.pins.gpio23.into(),  // back z
+   );
 
     let mut joysticks = Joysticks::new(
     peripherals.adc1,
@@ -97,7 +80,6 @@ fn main() {
             MenuChoice::Settings =>display::settings::settings_menu(&mut display, &buttons),
             _ => display::games::available_games(&mut display, &buttons, &mut joysticks),
         }
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        
+        FreeRtos::delay_ms(1);        
     }
 }

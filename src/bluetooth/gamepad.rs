@@ -1,6 +1,8 @@
 // originally: https://github.com/T-vK/ESP32-BLE-Keyboard
-// the keyboard HID code is taken from a github page , from the example section and give to claude
-// and claude re wrote it for gamepad and then i editted it , to make i work
+// 
+// the keyboard HID code is taken from a github page 
+// https://github.com/taks/esp32-nimble/blob/main/examples/ble_keyboard.rs , 
+// and claude re wrote the HID profile for gamepad and then i editted it , to make it work
 
 #![allow(dead_code)]
 
@@ -62,7 +64,7 @@ const HID_REPORT_DESCRIPTOR: &[u8] = hid!(
   (HIDINPUT, 0x02),
   (END_COLLECTION),
 );
-/// Gamepad buttons bitmask constants
+// Gamepad buttons bitmask constants
 pub struct Button;
 impl Button {
     // Action
@@ -216,12 +218,7 @@ impl Gamepad {
     self.report.ry = y;
     self.send_report();
   }
-/*
-  fn set_dpad(&mut self, direction: DPad) {
-    self.report.hat = direction as u8;
-    self.send_report();
-  }
-*/
+
 }
 
 pub fn start(display: &mut OledDisplay, buttons: &Buttons, joysticks: &mut Joysticks)  {

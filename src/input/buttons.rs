@@ -1,29 +1,44 @@
-use esp_idf_svc::hal::gpio::{AnyInputPin, Input, PinDriver, Pull,AnyIOPin};
+use esp_idf_svc::hal::{
+    delay::FreeRtos,
+    gpio::{AnyIOPin, AnyOutputPin, Input, Output, PinDriver, Pull},
+};
 
-pub struct Buttons<'a>{
-    pub x:     PinDriver<'a, AnyIOPin, Input>,
-    pub y:     PinDriver<'a, AnyIOPin, Input>,
-    pub a:     PinDriver<'a, AnyIOPin, Input>,
-    pub b:     PinDriver<'a, AnyIOPin, Input>,
+//         COL0    COL1    COL2    COL3
+// ROW0  [ X    ][ Y    ][ A    ][ B    ]
+// ROW1  [ UP   ][ DOWN ][ LEFT ][ RIGHT]
+// ROW2  [ L1   ][ L2   ][ R1   ][ R2   ]
+// ROW3  [ L3   ][ R3   ][ START][ SEL  ]
+//
+// BACK -> direct connection                #not exposed to bluetooth
 
-    pub up:    PinDriver<'a, AnyIOPin, Input>,
-    pub down:  PinDriver<'a, AnyIOPin, Input>,
-    pub left:  PinDriver<'a, AnyIOPin, Input>,
-    pub right: PinDriver<'a, AnyIOPin, Input>,
+const ROWS: usize = 4;
+const COLS: usize = 4;
+const DEBOUNCE_TICKS: u8 = 5;
 
-    pub l1:     PinDriver<'a, AnyIOPin, Input>,
-    pub l2:     PinDriver<'a, AnyIOPin, Input>,
-    pub l3:     PinDriver<'a, AnyIOPin, Input>,
+#[derive(Clone, Copy)]
+enum Button {
+    X, Y, A, B,
+    Up, Down, Left, Right,
+    L1, L2, R1, R2,
+    L3, R3, Start, Select,
+}
 
-    pub r1:     PinDriver<'a, AnyIOPin, Input>,
-    pub r2:     PinDriver<'a, AnyIOPin, Input>,
-    pub r3:     PinDriver<'a, AnyIOPin, Input>,
-    
-    pub start:     PinDriver<'a, AnyIOPin, Input>,
-    pub select:     PinDriver<'a, AnyIOPin, Input>,
-    pub back:     PinDriver<'a, AnyIOPin, Input>,
-    
+#[rustfmt::skip]
+const MAP: [[Button; COLS]; ROWS] = [
+    [Button::X,   Button::Y,      Button::A,     Button::B     ],
+    [Button::Up,  Button::Down,   Button::Left,  Button::Right ],
+    [Button::L1,  Button::L2,     Button::R1,    Button::R2    ],
+    [Button::L3,  Button::R3,     Button::Start, Button::Select],
+];
 
+pub struct Buttons<'a> {
+    rows: [PinDriver<'a, AnyOutputPin, Output>; ROWS],
+    cols: [PinDriver<'a, AnyIOPin, Input>; COLS],
+    back: PinDriver<'a, AnyIOPin, Input>,
+    debounce: [[u8; COLS]; ROWS],
+    back_debounce: u8,
+    state: [[bool; COLS]; ROWS],
+    back_state: bool,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -32,112 +47,136 @@ pub struct ButtonState {
     pub y: bool,
     pub a: bool,
     pub b: bool,
-
     pub up: bool,
     pub down: bool,
     pub left: bool,
     pub right: bool,
-
-    pub l1 : bool,
-    pub l2 : bool,
-    pub l3 : bool,
-    pub r1 : bool,
-    pub r2 : bool,
-    pub r3 : bool,
-
+    pub l1: bool,
+    pub l2: bool,
+    pub l3: bool,
+    pub r1: bool,
+    pub r2: bool,
+    pub r3: bool,
     pub start: bool,
     pub select: bool,
-    pub back: bool,
-
+    pub back: bool, // not exposed to bluetooth
 }
+
 impl<'a> Buttons<'a> {
-
-    // Call this once in main.rs to set up all buttons
-    // while calling this func. order matters
     pub fn new(
-        pin_x:     AnyIOPin,
-        pin_y:     AnyIOPin,
-        pin_a:     AnyIOPin,
-        pin_b:     AnyIOPin,
+        // Row pins - outputs, driven LOW during scan
+        row0: AnyOutputPin,
+        row1: AnyOutputPin,
+        row2: AnyOutputPin,
+        row3: AnyOutputPin,
         
-        pin_up:    AnyIOPin,
-        pin_down:  AnyIOPin,
-        pin_left:  AnyIOPin,
-        pin_right: AnyIOPin,
-    
-        pin_l1: AnyIOPin,
-        pin_l2: AnyIOPin,
-        pin_l3: AnyIOPin,
+        // Col pins - inputs with pull-up
+        col0: AnyIOPin,
+        col1: AnyIOPin,
+        col2: AnyIOPin,
+        col3: AnyIOPin,
 
-
-        pin_r1: AnyIOPin,
-        pin_r2: AnyIOPin,
-        pin_r3: AnyIOPin,
-
-        pin_start: AnyIOPin, 
-        pin_select: AnyIOPin,
         pin_back: AnyIOPin,
-
     ) -> Self {
-
-        // setting up each pin
-        let mut setup = |pin: AnyIOPin| {
-            let mut p = PinDriver::input(pin).unwrap();
-            p.set_pull(Pull::Up).unwrap(); // HIGH = not pressed, LOW = pressed
+        let mut make_row = |pin: AnyOutputPin| {
+            let mut p = PinDriver::output(pin).unwrap();
+            p.set_high().unwrap();
             p
         };
 
+        let mut make_col = |pin: AnyIOPin| {
+            let mut p = PinDriver::input(pin).unwrap();
+            p.set_pull(Pull::Up).unwrap();
+            p
+        };
+
+        let mut back = PinDriver::input(pin_back).unwrap();
+        back.set_pull(Pull::Up).unwrap();
+
         Self {
-            x: setup(pin_x),
-            y:setup(pin_y),
-            a:     setup(pin_a),
-            b:     setup(pin_b),
-
-            up:    setup(pin_up),
-            down:  setup(pin_down),
-            left:  setup(pin_left),
-            right: setup(pin_right),
-        
-            start: setup(pin_start),
-            select: setup(pin_select),
-            back: setup(pin_back),
-
-            l1: setup(pin_l1),
-            l2: setup(pin_l2),
-            l3: setup(pin_l3),
-
-            r1: setup(pin_r1),
-            r2: setup(pin_r2),
-            r3: setup(pin_r3),
+            rows: [make_row(row0), make_row(row1), make_row(row2), make_row(row3)],
+            cols: [make_col(col0), make_col(col1), make_col(col2), make_col(col3)],
+            back,
+            debounce: [[0; COLS]; ROWS],
+            back_debounce: 0,
+            state: [[false; COLS]; ROWS],
+            back_state: false,
         }
     }
 
-    // Call this every loop tick to get current button states
-    pub fn read(&self) -> ButtonState {
-        
-        ButtonState {
-            x: self.x.is_low(),
-            y: self.y.is_low(),
-            a:     self.a.is_low(),
-            b:     self.b.is_low(),
-
-            up:    self.up.is_low(),
-            down:  self.down.is_low(),
-            left:  self.left.is_low(),
-            right: self.right.is_low(),
-            
-            l1: self.l1.is_low(),
-            l2: self.l2.is_low(),
-            l3: self.l3.is_low(),
-
-            r1: self.r1.is_low(),
-            r2: self.r2.is_low(),
-            r3: self.r3.is_low(),
+    // runs one full scan and debounce update. call every 1ms.
+    pub fn tick(&mut self) {
+        // 4×4 matrix scan 
+        for row in 0..ROWS {
+            for r in 0..ROWS {
+                self.rows[r].set_high().unwrap();
+            }
+            self.rows[row].set_low().unwrap();
 
 
-            start: self.start.is_low(),
-            select: self.select.is_low(),
-            back: self.back.is_low(),
+            for col in 0..COLS {
+                let pressed = self.cols[col].is_low();
+
+                if pressed == self.state[row][col] {
+                    self.debounce[row][col] = 0;
+                } else {
+                    self.debounce[row][col] += 1;
+                    if self.debounce[row][col] >= DEBOUNCE_TICKS {
+                        self.state[row][col] = pressed;
+                        self.debounce[row][col] = 0;
+                    }
+                }
+            }
         }
+
+        for r in 0..ROWS {
+            self.rows[r].set_high().unwrap();
+        }
+
+        // --- standalone back pin ---
+        let back_pressed = self.back.is_low();
+        if back_pressed == self.back_state {
+            self.back_debounce = 0;
+        } else {
+            self.back_debounce += 1;
+            if self.back_debounce >= DEBOUNCE_TICKS {
+                self.back_state = back_pressed;
+                self.back_debounce = 0;
+            }
+        }
+    }
+
+    /// Returns debounced snapshot. Call after tick().
+    pub fn read(&self) -> ButtonState {
+        let mut out = ButtonState {
+            back: self.back_state,
+            ..Default::default()
+        };
+
+        for row in 0..ROWS {
+            for col in 0..COLS {
+                let val = self.state[row][col];
+                match MAP[row][col] {
+                    Button::X      => out.x      = val,
+                    Button::Y      => out.y      = val,
+                    Button::A      => out.a      = val,
+                    Button::B      => out.b      = val,
+                    Button::Up     => out.up     = val,
+                    Button::Down   => out.down   = val,
+                    Button::Left   => out.left   = val,
+                    Button::Right  => out.right  = val,
+                    Button::L1     => out.l1     = val,
+                    Button::L2     => out.l2     = val,
+                    Button::R1     => out.r1     = val,
+                    Button::R2     => out.r2     = val,
+                    Button::L3     => out.l3     = val,
+                    Button::R3     => out.r3     = val,
+                    Button::Start  => out.start  = val,
+                    Button::Select => out.select = val,
+                }
+            }
+        }
+
+        out
     }
 }

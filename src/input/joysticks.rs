@@ -8,7 +8,7 @@ use esp_idf_svc::hal::gpio::{Gpio32, Gpio33, Gpio34, Gpio35};
 
 #[derive(Debug, Default, Clone)]
 pub struct JoystickState {
-    pub x: i8,  //as per req. of hid profile
+    pub x: i8,  //as per requirement of hid profile
     pub y: i8, 
 }
 
