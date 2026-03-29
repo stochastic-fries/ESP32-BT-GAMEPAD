@@ -25,4 +25,5 @@ reffer input/ and display/ for implimentation functions -
 
  this is being written at the starting of the project and will be updated as the project goes ahead soon CAD files will also be added, if not remind me :) 
 
+***i broke my display so development is stopped until i get a new one :)
 CAUTION : under development!!!
