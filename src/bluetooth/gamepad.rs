@@ -221,7 +221,7 @@ impl Gamepad {
 
 }
 
-pub fn start(display: &mut OledDisplay, buttons: &Buttons, joysticks: &mut Joysticks)  {
+pub fn start(display: &mut OledDisplay, buttons: &mut Buttons, joysticks: &mut Joysticks)  {
     log::info!("Gamepad initialized, waiting for connection...");
     display.clear();
     let mut gamepad = match Gamepad::new() {

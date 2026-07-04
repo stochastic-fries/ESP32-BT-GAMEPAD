@@ -13,6 +13,8 @@ mod display;
 mod input;
 mod bluetooth;
 mod games;
+use esp_idf_svc::hal::delay::FreeRtos;
+
 
 use input::joysticks::Joysticks;
 use input::buttons::Buttons;
@@ -51,14 +53,19 @@ fn main() {
 
     // back buttons doesn't work with HID or bluetooth devices it is just to nevigate b/w menus
       let mut buttons = Buttons::new(
-       peripherals.pins.gpio13.into(),  // row0
-       peripherals.pins.gpio12.into(),  // row1
-       peripherals.pins.gpio14.into(),  // row2
-       peripherals.pins.gpio27.into(),  // row3
-       peripherals.pins.gpio19.into(),  // col0
-       peripherals.pins.gpio18.into(),  // col1
-       peripherals.pins.gpio5.into(),  // col2
-       peripherals.pins.gpio17.into(),  // col3
+       
+       
+       peripherals.pins.gpio27.into(),  // col0
+       peripherals.pins.gpio14.into(),  // col1
+       peripherals.pins.gpio12.into(),  // col2
+       peripherals.pins.gpio13.into(),  // col3
+       
+        peripherals.pins.gpio19.into(),  // row0
+       peripherals.pins.gpio18.into(),  // row1
+       peripherals.pins.gpio5.into(),  // row2
+       peripherals.pins.gpio17.into(),  // row3
+       
+       
        peripherals.pins.gpio23.into(),  // back z
    );
 
@@ -71,15 +78,16 @@ fn main() {
     );
 
     display::welcome::show(&mut display);
-    loop{
-        let choice = display::menu::main_menu(&mut display, &buttons);
-        
-        match choice {
-            MenuChoice::Bluetooth => bluetooth::gamepad::start(&mut display,&buttons, &mut joysticks),
-            MenuChoice::Games =>display::games::available_games(&mut display, &buttons, &mut joysticks),
-            MenuChoice::Settings =>display::settings::settings_menu(&mut display, &buttons),
-            _ => display::games::available_games(&mut display, &buttons, &mut joysticks),
-        }
-        FreeRtos::delay_ms(1);        
-    }
+    
+    buttons.debug_scan(); 
+    loop {
+       let choice = display::menu::main_menu(&mut display, &mut buttons);
+       match choice {
+           MenuChoice::Bluetooth => bluetooth::gamepad::start(&mut display, &mut buttons, &mut joysticks),
+           MenuChoice::Games => display::games::available_games(&mut display, &mut buttons, &mut joysticks),
+           MenuChoice::Settings => display::settings::settings_menu(&mut display, &mut buttons),
+           _ => display::games::available_games(&mut display, &mut buttons, &mut joysticks),
+       }
+       FreeRtos::delay_ms(20);
+}
 }

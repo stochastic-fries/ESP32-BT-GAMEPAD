@@ -16,7 +16,7 @@ use crate::config::MenuChoice;
 use esp_idf_svc::hal::delay::FreeRtos;
 
 
-pub fn settings_menu(display:&mut OledDisplay, buttons: &Buttons){
+pub fn settings_menu(display:&mut OledDisplay, buttons: &mut Buttons){
     display.clear();
 
     let heading_style = MonoTextStyleBuilder::new()

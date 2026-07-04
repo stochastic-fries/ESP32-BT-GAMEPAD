@@ -20,7 +20,7 @@ use crate::input::buttons::Buttons;
 use crate::input::joysticks::Joysticks;
 use esp_idf_svc::hal::delay::FreeRtos;
 
-pub fn start(display: &mut OledDisplay, buttons: &Buttons, joysticks: &mut Joysticks){
+pub fn start(display: &mut OledDisplay, buttons: &mut Buttons, joysticks: &mut Joysticks){
     display.clear();
     let heading_style = MonoTextStyleBuilder::new()
     .font(&FONT_9X18_BOLD)

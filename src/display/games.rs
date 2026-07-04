@@ -17,7 +17,7 @@ use crate::input::joysticks::Joysticks;
 use crate::config::MenuChoice;
 //use crate::config::Games;
 use crate::games; // menu redirecing to choose games
-pub fn available_games(display:&mut OledDisplay, buttons: &Buttons , joysticks: &mut Joysticks)  {
+pub fn available_games(display:&mut OledDisplay, buttons: &mut Buttons , joysticks: &mut Joysticks)  {
     display.clear();
     FreeRtos::delay_ms(200);
 
@@ -75,8 +75,8 @@ pub fn available_games(display:&mut OledDisplay, buttons: &Buttons , joysticks: 
 
         if button_states.x{
             match option {
-                0 => {games::debug::start(display, &buttons, joysticks); },
-                1 => games::snake::start(display, &buttons),
+                0 => {games::debug::start(display,  buttons, joysticks); },
+                1 => games::snake::start(display,  buttons),
                 _ => (),
             }
         }
